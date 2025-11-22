@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Passport Photo Generator - Multiple Rows</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .upload-section {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 30px;
+            background-color: #fafafa;
+        }
+        .upload-section.drag-over {
+            border-color: #4CAF50;
+            background-color: #f0fff0;
+        }
+        .file-input {
+            display: none;
+        }
+        .upload-btn {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+        .upload-btn:hover {
+            background: #45a049;
+        }
+        .preview-section {
+            display: none;
+            margin-bottom: 30px;
+        }
+        .photo-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 0;
+            margin: 20px 0;
+            background: white;
+            padding: 10px;
+            border: 1px solid #ddd;
+            justify-items: center;
+        }
+        .photo-cell {
+            width: 3.5cm;
+            height: 4.5cm;
+            border: 1px solid #ccc;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .photo-cell img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .row-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+        .row-label {
+            font-weight: bold;
+            color: #555;
+        }
+        .row-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        .row-btn {
+            background: #6c757d;
+            color: white;
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .row-btn:hover {
+            background: #5a6268;
+        }
+        .row-btn.remove {
+            background: #dc3545;
+        }
+        .row-btn.remove:hover {
+            background: #c82333;
+        }
+        .controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .generate-btn {
+            background: #2196F3;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 18px;
+            margin: 10px;
+        }
+        .generate-btn:hover {
+            background: #1976D2;
+        }
+        .reset-btn {
+            background: #ff9800;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 18px;
+            margin: 10px;
+        }
+        .reset-btn:hover {
+            background: #f57c00;
+        }
+        .add-row-btn {
+            background: #28a745;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+        .add-row-btn:hover {
+            background: #218838;
+        }
+        .add-row-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .status {
+            text-align: center;
+            margin: 10px 0;
+            font-weight: bold;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📷 Passport Photo Generator - Multiple Rows</h1>
+        
+        <div class="upload-section" id="uploadArea">
+            <button class="add-row-btn" id="addRowBtn" onclick="addNewRow()">➕ Add Row</button>
+            <p>Add up to 6 rows with different photos</p>
+        </div>
+
+        <div class="preview-section" id="previewSection">
+            <h3>Preview:</h3>
+            <div id="rowsContainer">
+                <!-- Rows will be added here dynamically -->
+            </div>
+            
+            <div class="controls">
+                <button class="generate-btn" onclick="generatePDF()">🖨️ Generate Printable PDF</button>
+                <button class="reset-btn" onclick="resetApp()">🔄 Reset All</button>
+            </div>
+        </div>
+
+        <div class="status" id="status"></div>
+    </div>
+
+    <script>
+        // Initialize jsPDF
+        const { jsPDF } = window.jspdf;
+
+        // DOM elements
+        const uploadArea = document.getElementById('uploadArea');
+        const previewSection = document.getElementById('previewSection');
+        const rowsContainer = document.getElementById('rowsContainer');
+        const status = document.getElementById('status');
+        const addRowBtn = document.getElementById('addRowBtn');
+
+        let rowCount = 0;
+        const maxRows = 6;
+        const rowData = []; // Store image data for each row
+
+        function addNewRow() {
+            if (rowCount >= maxRows) {
+                status.textContent = `Maximum ${maxRows} rows allowed.`;
+                return;
+            }
+
+            rowCount++;
+            const rowId = `row${rowCount}`;
+            
+            // Create row container
+            const rowDiv = document.createElement('div');
+            rowDiv.className = 'row';
+            rowDiv.id = rowId;
+            
+            // Create row controls
+            const rowControls = document.createElement('div');
+            rowControls.className = 'row-controls';
+            
+            const rowLabel = document.createElement('div');
+            rowLabel.className = 'row-label';
+            rowLabel.textContent = `Row ${rowCount}`;
+            
+            const rowButtons = document.createElement('div');
+            rowButtons.className = 'row-buttons';
+            
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.className = 'file-input';
+            fileInput.id = `fileInput${rowCount}`;
+            fileInput.accept = 'image/*';
+            
+            const uploadBtn = document.createElement('button');
+            uploadBtn.className = 'upload-btn';
+            uploadBtn.textContent = '📁 Upload Photo';
+            uploadBtn.onclick = () => fileInput.click();
+            
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'row-btn remove';
+            removeBtn.textContent = '❌ Remove Row';
+            removeBtn.onclick = () => removeRow(rowId);
+            
+            rowButtons.appendChild(uploadBtn);
+            rowButtons.appendChild(removeBtn);
+            
+            rowControls.appendChild(rowLabel);
+            rowControls.appendChild(rowButtons);
+            
+            // Create photo grid
+            const photoGrid = document.createElement('div');
+            photoGrid.className = 'photo-grid';
+            photoGrid.id = `photoGrid${rowCount}`;
+            
+            // Create 5 photo cells for this row
+            for (let i = 0; i < 5; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'photo-cell';
+                cell.id = `photoCell${rowCount}-${i}`;
+                photoGrid.appendChild(cell);
+            }
+            
+            // Assemble the row
+            rowDiv.appendChild(rowControls);
+            rowDiv.appendChild(fileInput);
+            rowDiv.appendChild(photoGrid);
+            
+            // Add to container
+            rowsContainer.appendChild(rowDiv);
+            
+            // Initialize row data
+            rowData[rowCount - 1] = null;
+            
+            // Set up file input handler
+            fileInput.addEventListener('change', function(e) {
+                if (this.files && this.files[0]) {
+                    handleImageUpload(this.files[0], rowCount);
+                }
+            });
+            
+            // Show preview section if this is the first row
+            if (rowCount === 1) {
+                previewSection.style.display = 'block';
+            }
+            
+            // Update add button state
+            if (rowCount >= maxRows) {
+                addRowBtn.disabled = true;
+                addRowBtn.textContent = 'Max Rows Reached';
+            }
+            
+            status.textContent = `Row ${rowCount} added. Upload a photo for this row.`;
+        }
+
+        function removeRow(rowId) {
+            const rowIndex = parseInt(rowId.replace('row', '')) - 1;
+            
+            // Remove from DOM
+            document.getElementById(rowId).remove();
+            
+            // Update row data
+            rowData.splice(rowIndex, 1);
+            rowCount--;
+            
+            // Update row labels and IDs
+            const rows = rowsContainer.querySelectorAll('.row');
+            rows.forEach((row, index) => {
+                const newRowId = `row${index + 1}`;
+                row.id = newRowId;
+                
+                // Update label
+                const label = row.querySelector('.row-label');
+                label.textContent = `Row ${index + 1}`;
+                
+                // Update file input and photo grid IDs
+                const fileInput = row.querySelector('.file-input');
+                fileInput.id = `fileInput${index + 1}`;
+                
+                const photoGrid = row.querySelector('.photo-grid');
+                photoGrid.id = `photoGrid${index + 1}`;
+                
+                // Update photo cell IDs
+                const cells = photoGrid.querySelectorAll('.photo-cell');
+                cells.forEach((cell, cellIndex) => {
+                    cell.id = `photoCell${index + 1}-${cellIndex}`;
+                });
+                
+                // Update row data index
+                rowData[index] = rowData[index + 1];
+            });
+            
+            // Enable add button if we're below max
+            if (rowCount < maxRows) {
+                addRowBtn.disabled = false;
+                addRowBtn.textContent = '➕ Add Row';
+            }
+            
+            // Hide preview section if no rows left
+            if (rowCount === 0) {
+                previewSection.style.display = 'none';
+            }
+            
+            status.textContent = `Row removed. ${rowCount} row(s) remaining.`;
+        }
+
+        function handleImageUpload(file, rowNumber) {
+            if (!file.type.match('image.*')) {
+                status.textContent = 'Please upload an image file (JPEG, PNG, etc.)';
+                return;
+            }
+
+            status.textContent = `Processing image for Row ${rowNumber}...`;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const imageData = e.target.result;
+                rowData[rowNumber - 1] = imageData;
+                
+                const img = new Image();
+                img.onload = function() {
+                    // Display preview in all 5 cells of this row
+                    for (let i = 0; i < 5; i++) {
+                        const cell = document.getElementById(`photoCell${rowNumber}-${i}`);
+                        cell.innerHTML = '';
+                        const previewImg = document.createElement('img');
+                        previewImg.src = imageData;
+                        cell.appendChild(previewImg);
+                    }
+                    
+                    status.textContent = `Photo loaded for Row ${rowNumber}!`;
+                };
+                img.src = imageData;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function generatePDF() {
+            if (rowCount === 0) {
+                status.textContent = 'Please add at least one row with a photo.';
+                return;
+            }
+
+            // Check if all rows have images
+            for (let i = 0; i < rowCount; i++) {
+                if (!rowData[i]) {
+                    status.textContent = `Please upload a photo for Row ${i + 1}.`;
+                    return;
+                }
+            }
+
+            status.textContent = 'Generating PDF...';
+
+            // Create PDF in A4 format
+            const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4'
+            });
+
+            const pdfWidth = pdf.internal.pageSize.getWidth(); // 210mm
+            const pdfHeight = pdf.internal.pageSize.getHeight(); // 297mm
+            
+            // Exact passport photo dimensions
+            const photoWidth = 35; // 3.5cm = 35mm
+            const photoHeight = 45; // 4.5cm = 45mm
+            
+            // Calculate total width for 5 photos
+            const totalRowWidth = 5 * photoWidth; // 175mm
+            
+            // Calculate minimal margins - centered horizontally
+            const leftRightMargin = (pdfWidth - totalRowWidth) / 2; // (210-175)/2 = 17.5mm each side
+            
+            // Position at the VERY TOP of the page (0.5mm from top - absolute minimum)
+            const startYFirstRow = 0.5;
+            // Small gap between rows (1mm)
+            const rowGap = 1;
+
+            // Track loaded images
+            let imagesLoaded = 0;
+            const totalImages = rowCount * 5;
+
+            // Function to add images to PDF
+            function addImagesToPDF() {
+                // Add each row
+                for (let row = 0; row < rowCount; row++) {
+                    const startY = startYFirstRow + (row * (photoHeight + rowGap));
+                    
+                    // Add 5 photos in this row
+                    for (let i = 0; i < 5; i++) {
+                        const xPos = leftRightMargin + (i * photoWidth);
+                        
+                        // Add the image to PDF at exact passport size
+                        pdf.addImage(
+                            rowData[row], 
+                            'JPEG', 
+                            xPos, 
+                            startY, 
+                            photoWidth, 
+                            photoHeight
+                        );
+                    }
+                }
+                
+                // Save the PDF
+                pdf.save('passport-photos-multiple.pdf');
+                status.textContent = 'PDF generated successfully! Check your downloads folder.';
+            }
+
+            // Preload all images to ensure they're ready
+            let loadedCount = 0;
+            const images = [];
+            
+            for (let row = 0; row < rowCount; row++) {
+                const img = new Image();
+                img.onload = function() {
+                    loadedCount++;
+                    if (loadedCount === rowCount) {
+                        addImagesToPDF();
+                    }
+                };
+                img.onerror = function() {
+                    status.textContent = `Error loading image for Row ${row + 1}. Please try again.`;
+                };
+                img.src = rowData[row];
+                images.push(img);
+            }
+        }
+
+        function resetApp() {
+            rowsContainer.innerHTML = '';
+            rowCount = 0;
+            rowData.length = 0;
+            previewSection.style.display = 'none';
+            status.textContent = '';
+            addRowBtn.disabled = false;
+            addRowBtn.textContent = '➕ Add Row';
+        }
+
+        // Initial instructions
+        status.textContent = 'Click "Add Row" to begin creating your passport photos.';
+    </script>
+</body>
+</html>
